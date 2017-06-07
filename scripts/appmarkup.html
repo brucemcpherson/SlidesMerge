@@ -1,0 +1,60 @@
+<div id="content-wrapper">
+
+  <ul class="mui-tabs__bar mui-tabs__bar--justified">
+    <li class="mui--is-active"><a data-mui-toggle="tab" data-mui-controls="container">Slides</a></li>
+    <li><a data-mui-toggle="tab" data-mui-controls="elementer-root">Settings</a></li>
+    <li><a data-mui-toggle="tab" data-mui-controls="about-">About</a></li>
+    
+  </ul>
+
+  <div id="elementer-root" class="mui-tabs__pane mui-container">
+    <div id="elementer-content"></div>
+  </div>
+  
+  <div id="about-" class="mui-tabs__pane mui-container">
+    about
+  </div>
+  
+  <div id="container" class="mui-tabs__pane mui--is-active mui-container">
+  <table class="mui-table">
+    <tr>
+     <td class="mui--align-middle">
+      <span id="presentation-thumbnail">
+        Presentation template
+      </span>
+     </td>
+     <td>
+       <button class="mui-btn" id = "presentation-button">select</button>
+     </td></tr>
+     <tr><td class="mui--align-middle">
+       <span id="presentation-result">
+         Result folder
+       </span>
+     </td><td>
+       <button class="mui-btn" id = "folder-button">select</button>
+     </td></tr>
+     
+     <tr class="mui--hide" id="slide-result-row"><td>Created slide <a id="slide-result-link" target="_blank"></a></td><td></td></tr>
+     <tr class="mui--hide" id="slide-folder-row"><td>Folder for created slides <a id="slide-folder-link" target="_blank" ></a></td><td></td></tr>
+  </table>
+  <div class="button-place">
+   <button class="mui-btn mui-btn--primary" id="start-button" disabled>merge</button>
+  </div>
+  </div>
+
+<div id="notification-area" class="notification mui--hide">
+  <div class="notification-header">
+    <span id="notification-header" class="notification-header-content"></span>
+    <span id="notification-close" class="mui--pull-right"><i class="mui--text-light material-icons">close</i></span>
+  </div>
+   <div id="notification-message" class="notification-message"></div>
+</div>
+
+<div class="spinner-container" id="spinner">
+  <svg class="spinner" width="33px" height="33px" viewBox="0 0 35 35" xmlns="http://www.w3.org/2000/svg">
+    <circle class="path" fill="none" stroke-width="4" stroke-linecap="round" cx="17" cy="17" r="15"></circle>
+  </svg>
+</div>
+
+</div>
+
