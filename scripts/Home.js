@@ -23,7 +23,8 @@ var Home = (function (ns) {
     });
     
     // select a template as input
-    DomUtils.elem("presentation-button").addEventListener ('click', function (e) {
+    DomUtils.elem("presentation-button")
+    .addEventListener ('click', function (e) {
       UsePicker.presentationDialog()
       .then (function (packet) {
         if (packet.id) {
