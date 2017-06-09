@@ -26,19 +26,20 @@ var Client = (function (ns) {
   
   // keep checking what sheets are in the book
   // and update drop downs if things have changed
+  
+  // I was concerned about memory leaks here (see this node issue .. https://github.com/nodejs/node/issues/6673)
+  // however these would only occur if return loop() rather than just loop()
   ns.looping = function () {
     
-    loop();
+    loopSheetManifest();
     
-    function loop() {
-      ns.getSheetsInBook()
-      .then (function (r) {
-        return Provoke.loiter (ns.settings.pollTime);
-      })
+    function loopSheetManifest() {
+      Promise.all ([ns.getSheetsInBook(), Provoke.loiter (ns.settings.pollTime)])
       .then (function () {
-        loop();
+        loopSheetManifest();
       });
     }
+    
   };
 
   ns.getSlideLink = function (id) {
