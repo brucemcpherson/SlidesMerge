@@ -14,12 +14,6 @@ var UsePicker = (function (ns) {
     },
     promises: {
     
-    },
-    views: {
-    
-    },
-    pickers: {
-    
     }
   };
   
@@ -65,7 +59,6 @@ var UsePicker = (function (ns) {
     
     var docsView = new google.picker.DocsView(google.picker.ViewId.PRESENTATIONS)
     .setIncludeFolders(true)
-
 
     return ns.dialog (docsView);
   };
