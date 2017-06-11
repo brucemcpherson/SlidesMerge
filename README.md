@@ -6,3 +6,8 @@ you can see [library and dependency information here](dependencies.md)
 This is source code for the slidesmerge add-on
 
 see here for details http://ramblings.mcpher.com/Home/excelquirks/addons/slidesmerge
+
+see video for how to use here https://youtu.be/rMXC86fV0Ek
+
+install from addon store in sheets.
+
