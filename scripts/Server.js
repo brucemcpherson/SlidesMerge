@@ -2,7 +2,7 @@
 var Server = (function(ns) {
   
   ns.settings = {
-
+    chartPrefix:"chart"
   };
 
   /**
@@ -67,11 +67,24 @@ var Server = (function(ns) {
   };
   
   // get names of all sheets in workbook
+  // also get all the charts int he book
   ns.getSheetsInBook = function () {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // we need to use the advanced sheets api to get the real chart ID
+    var ch = Sheets.Spreadsheets.get(ss.getId(), {"fields": "sheets(charts/chartId,properties(sheetId,title))"});
+    var sheets = ch.sheets.map (function (d) {
+      return {
+        id:d.properties.sheetId,
+        name:d.properties.title,
+        charts:d.charts
+      }
+    });
+   
+
     return {
       active:ss.getActiveSheet().getName(),
-      sheets:ss.getSheets().map(function(d) { return d.getName(); })
+      sheets:sheets
     }; 
   };
   
@@ -126,29 +139,9 @@ var Server = (function(ns) {
         return e.objectIds[e.objectId];
       });
       
-      // global subs
-      Object.keys(ns.settings.params.globals).forEach (function (h) {
-        var s = ns.settings.params.globals[h];
-        // image sub
-        imageSub (p ,  s, h ,pobs);
-        
-        // text subs
-        textSub (p , s , h ,pobs);
-      });
-        
-      
-      // substitute values from data
-      headers.forEach (function (h) {
+      // do all the substitutions
+      doSubs ( p , pobs, headers ,d);
 
-        var  s = d[h].toString();
-        
-        // image substitutions
-        imageSub (p , s , h ,pobs);
-        
-        // text substitutions
-        textSub (p , s , h ,pobs);
-        
-      });
       return p;
     });
     
@@ -181,6 +174,7 @@ var Server = (function(ns) {
     var dr = ns.settings.package.dupRequests;
     var fiddler = ns.settings.package.fiddler;
     var headers = fiddler.getHeaders();
+   
     
     // this is the sheet data
     var data = ns.settings.package.fiddler.getData();
@@ -194,34 +188,56 @@ var Server = (function(ns) {
         return e.objectId;
       });
       
-      // global subs
-      Object.keys(ns.settings.params.globals).forEach (function (h) {
-        var s = ns.settings.params.globals[h];
-        // image sub
-        imageSub (p ,  s, h ,pobs);
-        
-        // text subs
-        textSub (p , s , h ,pobs);
-      });
-      
-      // substitute values from data
-      headers.forEach (function (h) {
-        
-        var  s = d[h].toString();
-        
-        // image substitutions
-        imageSub (p , s , h ,pobs);
-        
-        // text substitutions
-        textSub (p , s , h ,pobs);
-        
-      });
+      // do all the substitutions
+      doSubs ( p , pobs, headers,d);
       return p;
-      
-      
-    });  
+    });
     
   };
+  
+  // do the subs
+  function doSubs (reqs,pobs,headers,dt) {
+    
+    var ss = ns.settings.package.ss;
+    var sheet = ns.settings.package.sheet;
+    
+    
+    // global subs
+    Object.keys(ns.settings.params.globals).forEach (function (h) {
+      var v = ns.settings.params.globals[h];
+      var s = v.value.toString();
+      
+      // chart sub
+      chartImageSub (reqs,v,h,pobs);
+      chartSub (reqs,v,h,pobs);
+        
+      // image sub
+      imageSub (reqs ,  s, h ,pobs);
+        
+      // text subs
+      textSub (reqs , s , h ,pobs);
+    });
+        
+      
+    // substitute values from data
+    headers.forEach (function (h) {
+      
+      var v = resolveCharts (ss, dt[h].toString() , sheet)
+      var s = dt[h].toString();
+      chartImageSub (reqs,v,h,pobs);
+      chartSub (reqs,v,h,pobs);
+      
+      // image substitutions
+      imageSub (reqs , s , h ,pobs);
+        
+      // text substitutions
+      textSub (reqs , s , h ,pobs);
+      
+    });
+
+    
+  }
+  
   
   
   // substitute global values
@@ -240,6 +256,47 @@ var Server = (function(ns) {
       }});
     }
     return reqs;
+  }
+
+  
+  
+   function chartImageSub (reqs , tob , field , pobs) {
+     
+     if (tob.type === ns.settings.chartPrefix) {
+
+       
+       // chart substitution - {{UNLINKED}}
+       reqs.push ({ replaceAllShapesWithSheetsChart:{
+         spreadsheetId:tob.id,
+         chartId:tob.chartId,
+         pageObjectIds:pobs,
+         linkingMode:"NOT_LINKED_IMAGE",
+         containsText:{
+           text:"{{{" + field + "}}}",
+           matchCase:true
+         }
+       }});
+
+     }
+  }
+  
+   function chartSub (reqs , tob , field , pobs) {
+     
+     if (tob.type === ns.settings.chartPrefix) {
+
+       
+      // chart substitution - {{LINKED}}
+       reqs.push ({ replaceAllShapesWithSheetsChart:{
+         spreadsheetId:tob.id,
+         chartId:tob.chartId,
+         pageObjectIds:pobs,
+         linkingMode:"LINKED",
+         containsText:{
+           text:"{{" + field + "}}",
+           matchCase:true
+         }
+       }});
+     }
   }
   
   function textSub (reqs , text , field , pobs) {
@@ -312,10 +369,11 @@ var Server = (function(ns) {
     var prp = sp.presoFolderPacket;
     var stp = sp.globalsPacket;
     
-    // open the sheet
+    
+    // open the sheet 
     var ss = shp && shp.sheetId ? SpreadsheetApp.openById(shp.sheetId) : SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) throw "could not open spreadsheet " + shp.sheetId;
-
+    
     var sheet = shp && shp.sheetName ? ss.getSheetByName(shp.sheetName) : ss.getActiveSheet();
     if (!sheet) throw "could not open target sheet";
 
@@ -327,9 +385,9 @@ var Server = (function(ns) {
       return (!sp.options.startRow || rn  >= sp.options.startRow ) && (!sp.options.finishRow || rn <= sp.options.finishRow) ;
     });
    
+
     // get the globals variable packet if there is one
     // although the add-on only provides global variables in same spreadsheet, this will handle both for future
-
     if (stp && stp.sheetName) {
       var sss = stp && stp.sheetId ? SpreadsheetApp.openById(stp.sheetId) : ss;
       if (!sss) throw "could not open spreadsheet " + stp.sheetId;
@@ -349,10 +407,20 @@ var Server = (function(ns) {
         p[c.name] = c.value;
         return p;
       },{});
+
+      // any chart stuff.. find any positional and rename to chart id
+      Object.keys(sp.globals)
+      .forEach(function(k) {
+        sp.globals[k] = resolveCharts(ss, sp.globals[k]);
+      });
+
+      
     }
     else {
       sp.globals = {};
     }
+    
+
     
     // get the template
     var template = DriveApp.getFileById(tep.id);
@@ -380,7 +448,63 @@ var Server = (function(ns) {
     
   };
 
-
+  function resolveCharts (ss, value, sheet) {
+    var v = {};
+    var st = ns.settings;
+    var scp = st.params.scopePacket;
+    v.value = value;
+    v.id = ss.getId();
+    var match = v.value.match(/[^."']+|"([^"]*)"|'([^']*)'/g);
+    // is this a chart alias?
+    
+    if (match && match[0] === st.chartPrefix) {
+      
+      // may do the same with things other than charts later
+      v.type = match[0];
+      
+      // it's on the non default data sheet
+      if (match.length === 3 ) {
+        var cindex = match[2];
+        var cs =  ss.getSheetByName(match[1]);
+        if (!cs) throw  'cannot find chart alias sheet ' + v.value;
+      }
+      
+      // its on the default data sheet
+      else if (match.length === 2)  {
+        var cindex = match[1];
+        var cs = sheet;
+      }
+      
+      // its a mess
+      else {
+        throw 'invalid chart alias ' + v.value;
+      }
+      
+      // we'll need the chartId and sheetId later         
+      v.sheetId = cs.getSheetId();
+      v.chartIndex = Utils.isNumeric(cindex) ? parseInt(cindex) : 0;
+      
+      
+      // we already have the in scope charts
+      var charts = scp.sheets.filter (function (e) {
+        return e.id === v.sheetId && e.charts && e.charts.length;
+      })[0];
+      
+      // make sure there are some
+      if (!charts) throw 'no charts found in sheet '+ cs.getName();
+      
+      // if there is no cindex, then we have to assume that we got the actual id
+      // otherwise it's positional
+      v.chartId = v.chartIndex ? 
+        (charts.charts[v.chartIndex-1] ? charts.charts[v.chartIndex-1].chartId : "") : cindex;
+      
+      // if we didnt get it, its still a mess
+      if (!v.chartId) throw 'coundnt find matching chart for ' + v.value;
+      
+    }
+    return v;
+  }
+  
   /** 
   * this one will find all the objectids in a deck
   */
