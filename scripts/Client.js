@@ -11,6 +11,7 @@ var Client = (function (ns) {
      sheetPacket: {} ,  // stuff about the sheet if null, use the active sheet
      presoFolderPacket: {}, // stuff about the output folder
      globalsPacket: {},  // stuff about the globals variable source
+     scopePacket: {},  // stuff about the sheets in scope
      options: {
       type: "multiple",    // multiple , single
       multiSuffix: "", // used with multiple, to append to deck name, gets data from sheet row variable
@@ -115,12 +116,13 @@ var Client = (function (ns) {
   ns.adaptSheets = function () {
     
     // these are the data variables, if there's a change then we need to update the potential multisuffix
-    if (sadapt ('data' , false, ns.settings.sheets.sheets,ns.settings.sheets.active) ){
+    var names = ns.settings.sheets.sheets.map (function (d) { return d.name; });
+    if (sadapt ('data' , false, names ,ns.settings.sheets.active) ){
        ns.adaptMultiSuffix(); 
     }
     
     // this is the globals variables 
-    sadapt ('globals' , true, ns.settings.sheets.sheets);
+    sadapt ('globals' , true, names);
 
   };
   
@@ -171,6 +173,8 @@ var Client = (function (ns) {
     ns.settings.deck.sheetPacket.sheetName = el.data;
     ns.settings.deck.globalsPacket.sheetName = el.globals;
 
+    // stuff in scope (could pick this up server side, but in the future there may be a client input)
+    ns.settings.deck.scopePacket = ns.settings.sheets;
   };
   
   // bring up the UI
