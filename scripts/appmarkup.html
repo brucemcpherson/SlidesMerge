@@ -26,11 +26,24 @@
       Global variables can be defined in a separate sheet to provide data for placeholders that are independent of the current data row - in others words applied to every set of slides. The same system of placeholder is used for both global and data variables,
       so {{global variable name}} will take its data from a sheet of name.value pairs held in a global variables sheet.
     </p>
+    <p>
+    Charts can be inserted by addressing them like this -  
+    {{chart.nameofsheet.positiononsheet}} to create a linked chart 
+    (one that will be updated when the original spreadsheet data is updated) or with triple curly brackets  
+    {{{chart.nameofsheet.positiononsheet}}} to insert an image of the current state of a chart. 
+    Charts can be specified both as data fields (to get a separate chart for each data row), or as a global item.
+    </p>
     <p></p>
     <div>
       <div class="mui--text-caption">Here's a short video on how to use Slides Merge</div>
       <iframe width="560" height="315" src="https://www.youtube.com/embed/rMXC86fV0Ek" frameborder="0" allowfullscreen></iframe>
     </div>
+    <div>
+      <div class="mui--text-caption">And to include charts in your deck(s)</div>
+      <iframe width="560" height="315" src="https://www.youtube.com/embed/FL3MNXozaJ4" frameborder="0" allowfullscreen></iframe>
+    </div>
+    
+    
     <p>
       More information at <a href="http://ramblings.mcpher.com/Home/excelquirks/addons/slidesmerge">www.mcpher.com</a>
     </p>
