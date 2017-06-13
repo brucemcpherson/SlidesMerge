@@ -275,6 +275,9 @@ function Elementer() {
       classes:{
         elementContainer:""
       },
+      properties:{
+        type:"text"
+      },
       values: {
         property:"value",
         value:"",
