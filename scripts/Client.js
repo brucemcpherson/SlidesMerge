@@ -5,7 +5,7 @@
 var Client = (function (ns) {
 
   ns.settings = {
-    pollTime: 10000,
+    pollTime: 30000,
     deck:{
      templatePacket: {}, //stuff about the template
      sheetPacket: {} ,  // stuff about the sheet if null, use the active sheet
@@ -22,7 +22,8 @@ var Client = (function (ns) {
      }
     },
     sheets:{},
-    data:{}
+    data:{},
+    version:"1.0.4"
   };
   
   // keep checking what sheets are in the book
@@ -81,13 +82,21 @@ var Client = (function (ns) {
     // hide the results rows
     showResultLinks (false);
     
-    return Provoke.run ('Server', 'start', ns.settings.deck)
+    // make sure we're up to date with everything
+    return ns.getSheetsInBook()
+    
+    // so the merge
+    .then (function () {
+      return Provoke.run ('Server', 'start', ns.settings.deck)
+    })
+    
+    // update the links to the result
     .then (function (result) {
-      
       showResultLinks (true, result);
       App.toast ("deck created", "done");
       resetCursor();
     })
+    
     ['catch'](function (err) {
       App.showNotification ("deck creation error", err);
       resetCursor();
@@ -158,16 +167,18 @@ var Client = (function (ns) {
     var sd = ns.settings.deck;
     var so = sd.options;
     var el = Ui.settings.elementer.getCurrent();
-    
+
     Object.keys(so).forEach (function (k) {
       if (el.hasOwnProperty (k)) {
+       
         so[k] = Utils.isNumeric(el[k]) ? parseFloat (el[k]) :el[k];
       }
       else {
         so[k] = "";
       }
     });
-  
+ 
+    
     // where to get the variables from
     // sheetId can also be set here, but this assumes we'll use the active sheet id
     ns.settings.deck.sheetPacket.sheetName = el.data;
