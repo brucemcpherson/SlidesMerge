@@ -107,7 +107,8 @@ var Server = (function(ns) {
     // this'll be used to put them in the correct position later
     var m = ns.settings.params.options.masters;
     var insertions = [], masters = [], aMasters = 
-        m ? (Array.isArray(m) ? m : m.toString().split(",").map(function(d) { return parseInt(d);})) : [] ;
+        m ? (Array.isArray(m) ? m : m.toString().split(",").map(function(d) { return parseInt(d,10);})) : [] ;
+ 
     
     ns.settings.package.reqs = data.map  (function (d,i) {
       
@@ -205,7 +206,7 @@ var Server = (function(ns) {
     // global subs
     Object.keys(ns.settings.params.globals).forEach (function (h) {
       var v = ns.settings.params.globals[h];
-      var s = v.value.toString();
+      var s = v.value;
       
       // chart sub
       chartImageSub (reqs,v,h,pobs);
@@ -401,10 +402,13 @@ var Server = (function(ns) {
       // now we can set up the globals
       sp.globals = stpFiddler.getData()
       .reduce(function (p,c) { 
-        if (p.hasOwnProperty(c.name)) {
-          throw 'Duplicate name ' + c + ' in globals sheet';
+        // ignore rows with no reasonable name
+        if (c.name) {
+          if (p.hasOwnProperty(c.name)) {
+            throw 'Duplicate name ' + c + ' in globals sheet';
+          }
+          p[c.name] = c.value;
         }
-        p[c.name] = c.value;
         return p;
       },{});
 
@@ -452,7 +456,7 @@ var Server = (function(ns) {
     var v = {};
     var st = ns.settings;
     var scp = st.params.scopePacket;
-    v.value = value;
+    v.value = value.toString();
     v.id = ss.getId();
     var match = v.value.match(/[^."']+|"([^"]*)"|'([^']*)'/g);
     // is this a chart alias?
@@ -497,7 +501,7 @@ var Server = (function(ns) {
       // otherwise it's positional
       v.chartId = v.chartIndex ? 
         (charts.charts[v.chartIndex-1] ? charts.charts[v.chartIndex-1].chartId : "") : cindex;
-      
+
       // if we didnt get it, its still a mess
       if (!v.chartId) throw 'coundnt find matching chart for ' + v.value;
       
