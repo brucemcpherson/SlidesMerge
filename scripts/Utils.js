@@ -371,7 +371,7 @@ var Utils = (function (ns) {
   };
   
   ns.isNumeric = function (ob) {
-    return !isNaN(parseFloat(ob));
+    return !isNaN(new Number(ob));
   };
    /**
   * find disconnected tables in a range of values
