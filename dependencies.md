@@ -1,5 +1,5 @@
 # Google Apps Script Project: SlidesMerge
-This repo (SlidesMerge) was automatically updated on 12 June 2017 16:32:19 BST by GasGit
+This repo (SlidesMerge) was automatically updated on 13 June 2017 10:29:15 BST by GasGit
 
 For more information see the [desktop liberation site](http://ramblings.mcpher.com/Home/excelquirks/drivesdk/gettinggithubready "desktop liberation") or [contact me on G+](https://plus.google.com/+BruceMcpherson "Bruce McPherson - GDE")
 ## Details for Apps Script project SlidesMerge
