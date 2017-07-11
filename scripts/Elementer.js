@@ -111,7 +111,7 @@ function Elementer() {
   };
   
   var defStyles_ = {
-    td: "padding:3px;",
+    td: "padding-top:3px;",
     tdLabel: "padding:3px;",
     tdIcon: "width:34px;padding:0px;margin:0;padding-top:4px;padding-left:3px;",  // was max-width:32, 3px padding
     tdElement: "padding:3px;",
