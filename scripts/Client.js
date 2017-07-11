@@ -18,12 +18,13 @@ var Client = (function (ns) {
       startRow: 1,       // where to start
       finishRow: 3,       // where to finish
       masters:[],       // an array of slide positions (starting at 1 to not duplicate)
-      nameBase:"slidesmerge-results"
+      nameBase:"slidesmerge-results",
+      missingBehavior:"always"
      }
     },
     sheets:{},
     data:{},
-    version:"1.0.4"
+    version:"1.0.5"
   };
   
   // keep checking what sheets are in the book
@@ -176,6 +177,7 @@ var Client = (function (ns) {
       else {
         so[k] = "";
       }
+      
     });
  
     
