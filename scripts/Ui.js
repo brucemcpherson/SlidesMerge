@@ -51,6 +51,16 @@ var Ui = (function (ns) {
           }
         },
         
+        missingBehavior: {
+          template: "selectTemplate",
+          label: "Skip if data field(s) are null",
+          icon: "featured_play_list",
+          options:["never","any","all"],
+          values:{
+            value:"never"
+          }
+        },
+        
         multiSuffix: {
           template: "selectTemplate",
           label: "Multi deck suffix",
@@ -61,7 +71,7 @@ var Ui = (function (ns) {
           }
         },
 
-        
+      
         startRow: {
           template: "numberTemplate",
           label: "Start row",
@@ -122,6 +132,8 @@ var Ui = (function (ns) {
           label: "Generated slides"
         }, 
         
+
+        
       },
       
       layout: {
@@ -133,7 +145,9 @@ var Ui = (function (ns) {
         pages: {
           root: {
             label:"Options",
-            items:["slideDivider", "type","nameBase", "multiSuffix","masters","dataDivider","data","startRow","finishRow","globals"],
+            items:["slideDivider", "type","nameBase", "multiSuffix",
+                   "masters","missingBehavior",
+                   "dataDivider","data","startRow","finishRow","globals"],
             on: {
               exit: function (elementer, branch) {
                // actually this is only a one page settings, with no saving - so nothing to do
