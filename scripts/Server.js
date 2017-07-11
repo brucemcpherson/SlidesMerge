@@ -1,12 +1,354 @@
-
+/**
+ * all communication with Slides API & sheets data
+ * is done server side from this namespace
+ */
 var Server = (function(ns) {
   
+  // local settings
   ns.settings = {
-    chartPrefix:"chart"
+    chartPrefix:"chart",
+    slidesPrefix:"slides",
+    elementPrefixes:{
+      "group":"elementGroup",
+      "shape":"shape"
+    },
+    propertyKeys: { // not yet implemented
+      resultsFolder:"slidesMerge_results_folder",
+      templateDeck:"slidesMerge_template_deck",
+      globalSheet:"slidesMerge_global_sheet"
+    }
   };
 
+  
   /**
-   * gets the token for use client side
+  * make a map of every placeholder
+  * this is used to optimize calls to slides api
+  * and only call replacements for objects that actually contain placeholders
+  */
+  ns.getPlaceholderMap = function () {
+    var st = ns.settings;
+    var sp = st.params;
+    var globals = sp.globals;
+    var fiddler = st.package.fiddler;
+    
+    // from the data sheet
+    var m =  fiddler.getHeaders()
+    .reduce (function (p,c) {
+      p[c] = {
+        type:'data',
+        appears:[]
+      }
+      return p;
+    }, {});
+    
+    // add the placeholders mentioned in the global data 
+    sp.placeholderMap = Object.keys(globals).reduce (function (p,c) {
+      p[c] = {
+        type:'global',
+        appears:[]
+      }
+      return p;
+    },m);
+
+
+    
+  };
+  
+  /**
+  * make a map of how many times a placeholder appears on each slide
+  * this is used to count placeholders per slide
+  * later on, this wil be used to decide whether to keep a slide
+  * if it meets the threshold for missing items
+  */
+  ns.makeAppearances = function () {  
+    var st = ns.settings;
+    var sp = st.params; 
+    var fiddler = st.package.fiddler;
+    
+    // set up an appears map
+    sp.appearsMap = Object.keys(sp.placeholderMap)
+    .reduce(function (p,k) {
+      sp.placeholderMap[k].appears.forEach (function (e) {
+       
+        p[e.slideId] = p[e.slideId] || {};
+        p[e.slideId][k] = p[e.slideId][k] || {count:0};
+        p[e.slideId][k].count++;
+      });
+      return p;
+    }, {});
+    
+    // now blow out for each row of data
+    sp.countMap = Object.keys(sp.appearsMap)
+    .reduce (function (p,k) {
+      // the current template slide
+      var c = sp.appearsMap[k];
+     
+      // each row of data
+      fiddler.getData().forEach (function (e,i) {
+        
+        // if its a single, then all the objects are in a single array element, indexed by name
+        // if its a multi, then the number of array lements == no of rows in data
+        var deck = sp.options.type === "multiple" ? i : 0 ;
+        
+        // count will be how many plaeholders on this page, observed will be updated for each one seen later
+        var ob = {count:0 , observed:0 };
+        
+        // a multiple doesnt need a row number to id the object since it'll be in a seprate deck anyway
+        var name = sp.options.type === "multiple" ? k : k+"_row_"+i   ;
+        
+        // this is a counter for each slide
+        p[deck] = p[deck] || {};
+        p[deck][name] =  ob;
+        
+        // sum the number of placeholders on this slide
+        Object.keys(sp.placeholderMap).forEach (function (f) {
+          if  (c[f]){
+            ob.count += c[f].count;
+          }
+        });
+      });
+      return p;
+    },[]);
+   
+    
+  };
+  
+  /**
+   * remove slides with missing placeholder data if required
+   * because they might not meet the selected threshold for retention
+   */
+  ns.removeMissing = function () {
+  
+    var st = ns.settings;
+    var sp = st.params; 
+    var so = sp.options;
+    
+
+    var removals = sp.countMap.map (function (deck) {
+      
+      // keep all anyway
+      if (so.missingBehavior === "never" ) return [];
+      
+      // filter out slides with missing placeholders
+      return Object.keys(deck).filter(function (k) {
+        // if we have them all, always keep
+        var d = deck[k];
+        if (d.count === d.observed || d.count === 0 ) return false;
+        // but if we needed them all reject, or if we needed at least some reject if there's not any
+        return so.missingBehavior === "any" ? true  : !d.observed;
+
+      });
+
+    });
+    
+    
+    
+    //now simply poke them on the delete requests if they are not already there
+    removals.forEach (function (deck,i) {
+      var dels = ns.settings.package.reqs[i].filter (function (e) {
+        return e.hasOwnProperty ("deleteObject");
+      })
+      .map (function (e) {
+        return e.deleteObject.objectId;
+      });
+
+                   
+      deck.forEach (function (d) {
+        
+          if (dels.indexOf(d) === -1){
+            
+            ns.settings.package.reqs[i].push ({
+              deleteObject: {
+                objectId:d
+              }
+            });
+          }
+
+       
+ 
+      });  
+    });
+  };
+  
+  
+  // get the template contents
+  // we want to make a map of where items appear to optimize the finl slides request
+  ns.optimizePlaceholders = function () {
+  
+    var st = ns.settings;
+    var sp = st.params;  
+    var tep = sp.templatePacket;
+    
+    // fetch the template data - I only want the textruns
+    // note that split placeholder will be ignored 
+    var fields = "slides(objectId,pageElements(elementGroup(children(objectId,shape/text/textElements/textRun/content)),objectId,shape/text/textElements/textRun/content))";
+    
+    // now we need to get the template data using the slides API
+    var result =  Slides.Presentations.get(tep.id, {
+      fields:fields
+    });
+   
+    // the idea here is that we match up the slide numbers with where the placeholders appear
+    result.slides.forEach (function (slide, idx) {
+      
+      // each pagelement within each slide
+      slide.pageElements.forEach (function (pe , pi) {
+        var shape = pe.shape;
+        var text = shape.text;
+        
+        // look at all the text elements on a page
+        text.textElements.forEach (function (te, ti) {
+         
+          // identified by the presence of a textRun.
+          if (te.textRun) {
+            
+            // extract the content
+            var content = te.textRun.content;
+            
+            // now we need to see if this is a place holder 
+            Object.keys(sp.placeholderMap).forEach (function (k) {
+              var rx = new RegExp("{{" + k + "}}");
+              
+              // if this matches, we've found a placeholder on this slide.
+              if (content.match(rx)) {
+                
+                // placeholderMap is organized by placeholder key
+                // and keeps a list of which pagelements in the template contain a given placeholder
+                sp.placeholderMap[k].appears.push ({
+                  pageElementId: pe.objectId,
+                  slideIndex:idx,
+                  slideId:slide.objectId
+                });
+                
+              }
+            });  
+          }
+        });
+      });
+    });
+    
+   
+  };
+
+  // find out if there's any links to other decks
+  // this whole section is unfinished and will not be implemented until
+  // this isssue is resolved
+  // https://issuetracker.google.com/issues/36761705
+  ns.getFromOtherDecks = function () {
+    var st = ns.settings;
+    var sp = st.params;
+    var se = st.elementPrefixes;
+    sp.otherDecks = [];
+    
+    /*
+
+
+    var fiddler = st.package.fiddler;
+    var globals = sp.globals;
+    
+    // first the data
+    sp.otherDecks = fiddler.getData()
+    .reduce(function(p,c) {
+      Object.keys(c).forEach (function (k) {
+        addSlidesFetchPacket ( p , c[k] , k) ;
+      });
+      return p;
+    } , {});
+    
+    // and the globals
+    Object.keys (globals).reduce (function (p,c) {
+      addSlidesFetchPacket ( p , globals[c] , c) ;
+      return p;
+    },sp.otherDecks);
+    
+
+    var fields = "slides(objectId,pageElements(objectId,transform," + Object.keys (se).map(function (k) { return se[k]; }).join (",") +"))";
+    // now we need to get the data using the slides API
+    var results = Object.keys(sp.otherDecks).map (function (e) {
+      return Slides.Presentations.get(e, {
+        fields:fields
+      });
+    });
+    
+    // now attach that to each of the required items
+    Object.keys(sp.otherDecks).forEach (function (k, i) {
+      var other = sp.otherDecks[k];
+      var result = results[i];
+      other.elements.forEach (function (d) {
+        var slide = result.slides[d.slideIndex-1];
+       
+        if (!slide) throw 'slide ' + d.slideIndex + ' missing from deck for ' + d.value;
+        
+        // now find the element index that matches the type
+        var elems = slide.pageElements.filter(function (e) {
+          return e.hasOwnProperty (se[d.elementType]);
+        });
+        if (!elems[d.elementIndex-1]) throw 'element ' + d.elementType + "." + d.elementIndex + ' missing from deck for ' + d.value;
+        d.elem = elems[d.elementIndex-1];
+      });
+      
+    });
+    
+    // now make page element requests for each elementTODO!!!!!
+    sp.pageElementRequests = Object.keys(sp.otherDecks).reduce (function (p,c) {
+      var other = sp.otherDecks[c];
+      other.elements.forEach (function (d,j) {
+        p.push( {
+          "pageObjectId": "x"+c+j,
+          "size": {
+            "width": {
+              "magnitude": 3000000,
+              "unit": 'EMU',
+            },
+            "height": {
+              "magnitude": 3000000,
+              "unit": 'EMU',
+            },
+          },
+          "transform": {
+            scaleX:0.6052, 
+            scaleY:0.7583, 
+            unit:"EMU",
+            translateY:2791226.445, 
+            translateX:1477066.6375000002
+          }
+        });
+      });
+      return p;
+    },[]);
+    
+
+    function addSlidesFetchPacket (p, value , key) {
+      // its a link to another deck
+      // slides.id.sheetnumber.group.1
+      var s = value.toString().split(".");
+      if (s[0] === st.slidesPrefix && s.length > 1) {
+        if (s.length !== 5 || s.some(function(e) { return !e;}) || !se.hasOwnProperty(s[3])) {
+          throw 'invalid slides reference ' + value;
+        }
+        // get the id of the deck being referenced
+        var id = s[1];
+        if (!p.hasOwnProperty(id)) {
+          p[id] = {
+            id:id,
+            elements:[]
+          }
+        };
+        p[id].elements.push ({
+          value:value,
+          elementType:s[3],
+          slideIndex:s[2],
+          elementIndex:s[4],
+          key:key
+        });
+      }
+    }
+    
+    */
+  }
+  
+  /**
+   * gets the token for use client side picker use
    */
   ns.getOAuthToken = function () {
     return ScriptApp.getOAuthToken();
@@ -22,6 +364,14 @@ var Server = (function(ns) {
     var sheet = ss.getSheetByName(sheetName);
     return sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
   };
+  
+  /**
+   * set the parameters as default for next time
+   */
+  ns.setPosterity = function () {
+    //not yet implemented - for the future
+  };
+  
   /**
    * entry point to create deck(s)
    */
@@ -32,6 +382,23 @@ var Server = (function(ns) {
 
     // open eveything
     ns.getEverything();
+    
+    // record properties for posterity against this document
+    // will be implemented in a future version
+    ns.setPosterity ();
+    
+    // make a map of all known placeholders
+    ns.getPlaceholderMap();
+    
+    // optimize the placeholders to minimize requests later
+    ns.optimizePlaceholders();
+    
+    // get a map of where placeholders appear
+    ns.makeAppearances();
+   
+    // get info on any other decks that will be need to be referenced
+    // this doesn't do anything for now until GAS issue is resolved
+    ns.getFromOtherDecks();
   
     // generate the dup requests
     // returns [ each row [each slide] ]
@@ -42,7 +409,10 @@ var Server = (function(ns) {
   
     // now apply subs
     ns.applySubs();
-  
+    
+    // now deal wth deleting slides when placeholder values are missing
+    ns.removeMissing ();
+    
     // now apply   
     ns.execute ();
     
@@ -65,6 +435,8 @@ var Server = (function(ns) {
     
 
   };
+  
+  
   
   // get names of all sheets in workbook
   // also get all the charts int he book
@@ -100,6 +472,7 @@ var Server = (function(ns) {
     var dr = ns.settings.package.dupRequests;
     var fiddler = ns.settings.package.fiddler;
     var headers = fiddler.getHeaders();
+    var sp = ns.settings.params;
     
     // this is the sheet data
     var data = ns.settings.package.fiddler.getData();
@@ -132,21 +505,23 @@ var Server = (function(ns) {
             }});
         }
         
+
         return t;
       },[]);
       
-      // common to all
+      // the slide ids associated with each row.
       var pobs =  dr[i].map (function (e) {
         return e.objectIds[e.objectId];
       });
       
       // do all the substitutions
-      doSubs ( p , pobs, headers ,d);
+      // this is a single deck, so the object will be named and in a single countmap element
+      doSubs ( p , pobs, headers ,d, sp.countMap[0]);
 
       return p;
     });
-    
 
+    
     // delete the original templates
     var dels = ns.settings.package.objectIds.map(function(e) {
       return {
@@ -163,10 +538,14 @@ var Server = (function(ns) {
     // delete any masters that dont need to be duplicated
     Array.prototype.push.apply (ns.settings.package.reqs, masters);
 
+    
     // wrap in array to be compat with multi
     ns.settings.package.reqs =[ns.settings.package.reqs];
     
   };
+  
+  
+
   
   // for when we're creating multiple files.
   function applySubsMulti () {
@@ -175,7 +554,7 @@ var Server = (function(ns) {
     var dr = ns.settings.package.dupRequests;
     var fiddler = ns.settings.package.fiddler;
     var headers = fiddler.getHeaders();
-   
+    var sp = ns.settings.params;
     
     // this is the sheet data
     var data = ns.settings.package.fiddler.getData();
@@ -184,39 +563,64 @@ var Server = (function(ns) {
     ns.settings.package.reqs = data.map(function (d,i) {
 
       var p = [];
+      
       // common to all
       var pobs =  dr[i].map (function (e) {
         return e.objectId;
       });
       
       // do all the substitutions
-      doSubs ( p , pobs, headers,d);
+      // this is a multi deck, so the object will be named and in a countmap  element that matches its row number
+      doSubs ( p , pobs, headers,d,sp.countMap[i]);
       return p;
     });
     
   };
   
-  // do the subs
-  function doSubs (reqs,pobs,headers,dt) {
+  /**
+  * do the subs
+  * @param {string[]} pobs an array of object ids, one for each row in the data
+  */
+  function doSubs (reqs,pobs,headers,dt,countMap) {
     
     var ss = ns.settings.package.ss;
     var sheet = ns.settings.package.sheet;
+    var st = ns.settings;
+    var sp = st.params; 
     
     
-    // global subs
+    function tweakPobs (placeholder, pobs) {
+    
+      var p = sp.placeholderMap[placeholder];
+      if (!p) throw 'somethings gone wrong with optimization:Lost placeholder ' + placeholder ;
+      
+      // reduce the pobs to only contain slide objects that reference the placeholder
+      // the pobs is the slideId + some row number
+      return pobs.filter (function (d) {
+        return p.appears.some (function (e) {
+          return d.slice(0,e.slideId.length) === e.slideId;
+        });
+      });
+    }
+    
+    // global subs - one for each known global
     Object.keys(ns.settings.params.globals).forEach (function (h) {
       var v = ns.settings.params.globals[h];
       var s = v.value;
       
+      // tweak the list of slide objects to apply this to exclude those in which 
+      // the placeholder doesn't appear
+      var tweaked = tweakPobs (h, pobs);
+
       // chart sub
-      chartImageSub (reqs,v,h,pobs);
-      chartSub (reqs,v,h,pobs);
+      chartImageSub (reqs,v,h,tweaked);
+      chartSub (reqs,v,h,tweaked);
         
       // image sub
-      imageSub (reqs ,  s, h ,pobs);
+      imageSub (reqs ,  s, h ,tweaked);
         
       // text subs
-      textSub (reqs , s , h ,pobs);
+      textSub (reqs , s , h ,tweaked,countMap);
     });
         
       
@@ -225,14 +629,18 @@ var Server = (function(ns) {
       
       var v = resolveCharts (ss, dt[h].toString() , sheet)
       var s = dt[h].toString();
-      chartImageSub (reqs,v,h,pobs);
-      chartSub (reqs,v,h,pobs);
+      
+      // the placeholder doesn't appear
+      var tweaked = tweakPobs (h, pobs);
+
+      chartImageSub (reqs,v,h,tweaked);
+      chartSub (reqs,v,h,tweaked);
       
       // image substitutions
-      imageSub (reqs , s , h ,pobs);
+      imageSub (reqs , s , h ,tweaked);
         
       // text substitutions
-      textSub (reqs , s , h ,pobs);
+      textSub (reqs , s , h ,tweaked,countMap);
       
     });
 
@@ -245,7 +653,7 @@ var Server = (function(ns) {
   function imageSub (reqs , text , field, pobs) {
     
     // image subs
-    if (text.slice(0,4) === "http") {
+    if (pobs.length && text.slice(0,4) === "http") {
       reqs.push ({ replaceAllShapesWithImage:{
         imageUrl:text,
         replaceMethod: 'CENTER_INSIDE',
@@ -260,57 +668,77 @@ var Server = (function(ns) {
   }
 
   
-  
-   function chartImageSub (reqs , tob , field , pobs) {
-     
-     if (tob.type === ns.settings.chartPrefix) {
-
-       
-       // chart substitution - {{UNLINKED}}
-       reqs.push ({ replaceAllShapesWithSheetsChart:{
-         spreadsheetId:tob.id,
-         chartId:tob.chartId,
-         pageObjectIds:pobs,
-         linkingMode:"NOT_LINKED_IMAGE",
-         containsText:{
-           text:"{{{" + field + "}}}",
-           matchCase:true
-         }
-       }});
-
-     }
+  // substitute a chart as an image
+  function chartImageSub (reqs , tob , field , pobs) {
+    
+    if (pobs.length && tob.type === ns.settings.chartPrefix) {
+      
+      
+      // chart substitution - {{UNLINKED}}
+      reqs.push ({ replaceAllShapesWithSheetsChart:{
+        spreadsheetId:tob.id,
+        chartId:tob.chartId,
+        pageObjectIds:pobs,
+        linkingMode:"NOT_LINKED_IMAGE",
+        containsText:{
+          text:"{{{" + field + "}}}",
+          matchCase:true
+        }
+      }});
+      
+    }
   }
   
-   function chartSub (reqs , tob , field , pobs) {
-     
-     if (tob.type === ns.settings.chartPrefix) {
-
-       
+  // substitute as a linked chart
+  function chartSub (reqs , tob , field , pobs) {
+    
+    if (pobs.length && tob.type === ns.settings.chartPrefix) {
+      
+      
       // chart substitution - {{LINKED}}
-       reqs.push ({ replaceAllShapesWithSheetsChart:{
-         spreadsheetId:tob.id,
-         chartId:tob.chartId,
-         pageObjectIds:pobs,
-         linkingMode:"LINKED",
-         containsText:{
-           text:"{{" + field + "}}",
-           matchCase:true
-         }
-       }});
-     }
+      reqs.push ({ replaceAllShapesWithSheetsChart:{
+        spreadsheetId:tob.id,
+        chartId:tob.chartId,
+        pageObjectIds:pobs,
+        linkingMode:"LINKED",
+        containsText:{
+          text:"{{" + field + "}}",
+          matchCase:true
+        }
+      }});
+    }
   }
   
-  function textSub (reqs , text , field , pobs) {
+  /**
+  * do the text substitution
+  * the list of objects has been optimized so that it only applies to slides that contain 
+  * the placeholder currently being worked on
+  * so if pobs.length ===0 then the placeholder doesn't appear so skip
+  */
+  function textSub (reqs , text , field , pobs, countMap) {
+    
+    var st = ns.settings;
+    var sp = st.params; 
     
     // text substitution
-    reqs.push ({ replaceAllText:{
-      replaceText:text,
-      pageObjectIds:pobs,
-      containsText:{
-        text:"{{" + field + "}}",
-        matchCase:true
+    if (pobs.length) {
+      
+      // count observations on slide
+      if (text !== "") {
+        pobs.forEach (function (e) {
+          countMap[e].observed ++;
+        });
       }
-    }});
+      reqs.push ({ replaceAllText:{
+        replaceText:text,
+        pageObjectIds:pobs,
+        containsText:{
+          text:"{{" + field + "}}",
+          matchCase:true
+        }
+      }});
+      
+    }
   }
   
   //
@@ -339,7 +767,7 @@ var Server = (function(ns) {
   };
   
   //
-  // the dup requests contain a batch request to duplicate - one for every row in the data
+  // the dup requests contain a batch request list to duplicate - one for every row in the data
   // 
   ns.createDupRequests = function () {
     
@@ -452,6 +880,8 @@ var Server = (function(ns) {
     
   };
 
+  // charts have a special syntax
+  // pointing to potentially  different spreadsheet as the source
   function resolveCharts (ss, value, sheet) {
     var v = {};
     var st = ns.settings;
@@ -521,20 +951,7 @@ var Server = (function(ns) {
     
   }
   
-  /**
-   * server side util to find folder from path
-   */
-  ns.getDriveFolderFromPath = function (path) {
-    return (path || "/").split("/").reduce ( function(prev,current) {
-      if (prev && current) {
-        var fldrs = prev.getFoldersByName(current);
-        return fldrs.hasNext() ? fldrs.next() : null;
-      }
-      else { 
-        return current ? null : prev; 
-      }
-    },DriveApp.getRootFolder()); 
-}
+
 
 
   return ns;
