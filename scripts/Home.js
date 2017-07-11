@@ -22,6 +22,10 @@ var Home = (function (ns) {
       });
     });
     
+    DomUtils.elem("close-button").addEventListener ('click', function (e) {
+       google.script.host.close();
+    });
+    
     // select a template as input
     DomUtils.elem("presentation-button")
     .addEventListener ('click', function (e) {
