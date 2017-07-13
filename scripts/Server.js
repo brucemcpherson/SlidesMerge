@@ -194,36 +194,38 @@ var Server = (function(ns) {
       // each pagelement within each slide
       slide.pageElements.forEach (function (pe , pi) {
         var shape = pe.shape;
-        var text = shape.text;
-        
-        // look at all the text elements on a page
-        text.textElements.forEach (function (te, ti) {
-         
-          // identified by the presence of a textRun.
-          if (te.textRun) {
+        var text = pe.shape && shape.text;
+        if (text) {
+          // look at all the text elements on a page
+          text.textElements.forEach (function (te, ti) {
             
-            // extract the content
-            var content = te.textRun.content;
-            
-            // now we need to see if this is a place holder 
-            Object.keys(sp.placeholderMap).forEach (function (k) {
-              var rx = new RegExp("{{" + k + "}}");
+            // identified by the presence of a textRun.
+            if (te.textRun) {
               
-              // if this matches, we've found a placeholder on this slide.
-              if (content.match(rx)) {
+              // extract the content
+              var content = te.textRun.content;
+              
+              // now we need to see if this is a place holder 
+              Object.keys(sp.placeholderMap).forEach (function (k) {
+                var rx = new RegExp("{{" + k + "}}");
                 
-                // placeholderMap is organized by placeholder key
-                // and keeps a list of which pagelements in the template contain a given placeholder
-                sp.placeholderMap[k].appears.push ({
-                  pageElementId: pe.objectId,
-                  slideIndex:idx,
-                  slideId:slide.objectId
-                });
-                
-              }
-            });  
-          }
-        });
+                // if this matches, we've found a placeholder on this slide.
+                if (content.match(rx)) {
+                  
+                  // placeholderMap is organized by placeholder key
+                  // and keeps a list of which pagelements in the template contain a given placeholder
+                  sp.placeholderMap[k].appears.push ({
+                    pageElementId: pe.objectId,
+                    slideIndex:idx,
+                    slideId:slide.objectId
+                  });
+                  
+                }
+              });  
+            }
+          });
+        }
+
       });
     });
     
