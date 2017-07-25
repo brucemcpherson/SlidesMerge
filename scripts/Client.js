@@ -24,7 +24,7 @@ var Client = (function (ns) {
     },
     sheets:{},
     data:{},
-    version:"1.0.5"
+    version:"1.0.7"
   };
   
   // keep checking what sheets are in the book
