@@ -181,7 +181,10 @@ var Server = (function(ns) {
     
     // fetch the template data - I only want the textruns
     // note that split placeholder will be ignored 
-    var fields = "slides(objectId,pageElements(elementGroup(children(objectId,shape/text/textElements/textRun/content)),objectId,shape/text/textElements/textRun/content))";
+    var fields = "slides(objectId,pageElements(" + 
+      "elementGroup(children(objectId,shape/text/textElements/textRun/content,table))," + 
+      "objectId,shape/text/textElements/textRun/content,table" + 
+     "))";
     
     // now we need to get the template data using the slides API
     var result =  Slides.Presentations.get(tep.id, {
@@ -193,42 +196,58 @@ var Server = (function(ns) {
       
       // each pagelement within each slide
       slide.pageElements.forEach (function (pe , pi) {
+
         var shape = pe.shape;
-        var text = pe.shape && shape.text;
-        if (text) {
-          // look at all the text elements on a page
-          text.textElements.forEach (function (te, ti) {
-            
-            // identified by the presence of a textRun.
-            if (te.textRun) {
-              
-              // extract the content
-              var content = te.textRun.content;
-              
-              // now we need to see if this is a place holder 
-              Object.keys(sp.placeholderMap).forEach (function (k) {
-                var rx = new RegExp("{{" + k + "}}");
-                
-                // if this matches, we've found a placeholder on this slide.
-                if (content.match(rx)) {
-                  
-                  // placeholderMap is organized by placeholder key
-                  // and keeps a list of which pagelements in the template contain a given placeholder
-                  sp.placeholderMap[k].appears.push ({
-                    pageElementId: pe.objectId,
-                    slideIndex:idx,
-                    slideId:slide.objectId
-                  });
-                  
-                }
-              });  
-            }
+        var table = pe.table;
+        
+        if (table) {
+          table.tableRows.forEach (function (tr) {
+            tr.tableCells.forEach (function (tc) {
+              collectShapes ( tc && tc.text,pe ,idx , slide) ;
+            });
           });
         }
-
+        else {
+          collectShapes ( pe.shape && shape.text,pe ,idx , slide) ;
+        }        
+        
       });
     });
-    
+
+
+    function collectShapes (text, pe , idx, slide) {
+      if (text) {
+        // look at all the text elements on a page
+        text.textElements.forEach (function (te, ti) {
+          
+          // identified by the presence of a textRun.
+          if (te.textRun) {
+            
+            // extract the content
+            var content = te.textRun.content;
+            
+            
+            // now we need to see if this is a place holder 
+            Object.keys(sp.placeholderMap).forEach (function (k) {
+              var rx = new RegExp("{{" + k + "}}");
+              
+              // if this matches, we've found a placeholder on this slide.
+              if (content.match(rx)) {
+                
+                // placeholderMap is organized by placeholder key
+                // and keeps a list of which pagelements in the template contain a given placeholder
+                sp.placeholderMap[k].appears.push ({
+                  pageElementId: pe.objectId,
+                  slideIndex:idx,
+                  slideId:slide.objectId
+                });
+                
+              }
+            });  
+          }
+        });
+      }
+    }    
    
   };
 
