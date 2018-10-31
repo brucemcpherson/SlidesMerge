@@ -1,5 +1,5 @@
 # Google Apps Script Project: SlidesMerge
-This repo (SlidesMerge) was automatically updated on 14 January 2018 10:59:46 GMT by GasGit
+This repo (SlidesMerge) was automatically updated on 31 October 2018 11:43:56 GMT by GasGit
 
 For more information see the [desktop liberation site](http://ramblings.mcpher.com/Home/excelquirks/drivesdk/gettinggithubready "desktop liberation") or [contact me on G+](https://plus.google.com/+BruceMcpherson "Bruce McPherson - GDE")
 ## Details for Apps Script project SlidesMerge
@@ -38,7 +38,9 @@ no libraries discovered
 ### Enabled Google Services
 *library*|*identifier*|*version*
 --- | --- | --- 
-Slides| Slides|unknown
-Sheets| Sheets|unknown
-###Need more detail ?
+Slides| Slides|v1
+Sheets| Sheets|v4
+### Scopes required
+no scopes discovered
+### Need more detail ?
 You can see [full project info as json here](info.json)
